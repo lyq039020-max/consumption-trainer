@@ -118,9 +118,12 @@ function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div>
+        <div className="brand-lockup">
+          <img src="./pwa-192x192.png" alt="" />
+          <div>
           <p className="eyebrow">个人单机记录</p>
           <h1>消费训练</h1>
+          </div>
         </div>
         <button className="icon-button" type="button" aria-label="打开数据设置" onClick={() => setSettingsOpen(true)}>⋯</button>
       </header>
@@ -175,7 +178,7 @@ function App() {
 function WelcomeIntro({ onLearn, onStart }: { onLearn: () => void; onStart: () => void }) {
   return <section className="intro-screen" role="dialog" aria-modal="true" aria-labelledby="intro-title">
     <div className="intro-content">
-      <p className="eyebrow">消费训练</p>
+      <p className="eyebrow">把钱变成更好的状态</p>
       <h2 id="intro-title">为什么我们需要<br />训练消费能力</h2>
       <p>消费不是简单地少花钱或多买东西，而是学习让有限的金钱真正改善身体、状态、效率与生活。</p>
       <div className="intro-actions">
