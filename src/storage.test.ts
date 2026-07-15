@@ -24,4 +24,13 @@ describe('本地数据', () => {
     expect(() => validateData({ version: 1, records: [{ id: 'x' }], budgets: [] })).toThrow()
     expect(() => validateData({ version: 1, records: [], budgets: [{ month: 'bad', amount: -1 }] })).toThrow()
   })
+
+  it('读取旧备份时自动补齐消费原因', () => {
+    const restored = validateData({
+      version: 1,
+      records: [{ id: 'old', date: '2026-07-16', amount: 399, purpose: '购买篮球鞋', feedback: '穿着很舒服', createdAt: '2026-07-16T01:00:00.000Z', updatedAt: '2026-07-16T01:00:00.000Z' }],
+      budgets: [],
+    })
+    expect(restored.records[0]).toMatchObject({ reason: '', feedback: '穿着很舒服' })
+  })
 })

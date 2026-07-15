@@ -32,6 +32,7 @@ function App() {
   const [introMode, setIntroMode] = useState<IntroMode>(() => hasSeenIntro() ? null : 'welcome')
   const [budgetOpen, setBudgetOpen] = useState(() => effectiveBudget(loadData().budgets, currentMonth()).amount === null)
   const [editing, setEditing] = useState<ExpenseRecord | null>(null)
+  const [feedbackRecord, setFeedbackRecord] = useState<ExpenseRecord | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => saveData(data), [data])
@@ -59,14 +60,14 @@ function App() {
     setNotice({ type: 'success', text: `${monthLabel(viewMonth)}额度已保存` })
   }
 
-  const addRecord = (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'feedback'>) => {
+  const addRecord = (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'reason'>) => {
     const timestamp = new Date().toISOString()
-    setData((previous) => ({ ...previous, records: [...previous.records, { ...input, id: newId(), createdAt: timestamp, updatedAt: timestamp }] }))
+    setData((previous) => ({ ...previous, records: [...previous.records, { ...input, feedback: '', id: newId(), createdAt: timestamp, updatedAt: timestamp }] }))
     setViewMonth(input.date.slice(0, 7))
     setNotice({ type: 'success', text: '记录已保存' })
   }
 
-  const updateRecord = (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'feedback'>) => {
+  const updateRecord = (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'reason'>) => {
     if (!editing) return
     setData((previous) => ({
       ...previous,
@@ -75,6 +76,16 @@ function App() {
     setEditing(null)
     setViewMonth(input.date.slice(0, 7))
     setNotice({ type: 'success', text: '记录已更新' })
+  }
+
+  const updateFeedback = (feedback: string) => {
+    if (!feedbackRecord) return
+    setData((previous) => ({
+      ...previous,
+      records: previous.records.map((record) => record.id === feedbackRecord.id ? { ...record, feedback, updatedAt: new Date().toISOString() } : record),
+    }))
+    setFeedbackRecord(null)
+    setNotice({ type: 'success', text: feedback ? '使用反馈已保存' : '使用反馈已清空' })
   }
 
   const deleteRecord = (record: ExpenseRecord) => {
@@ -143,6 +154,7 @@ function App() {
             onMonthChange={setViewMonth}
             onBudget={() => setBudgetOpen(true)}
             onEdit={setEditing}
+            onFeedback={setFeedbackRecord}
             onDelete={deleteRecord}
           />
         )}
@@ -156,6 +168,7 @@ function App() {
       {notice && <div className={`toast ${notice.type}`} role="status">{notice.text}</div>}
       {budgetOpen && <BudgetDialog month={viewMonth} initial={selectedBudget.amount} required={data.budgets.length === 0} onSave={upsertBudget} onClose={() => data.budgets.length > 0 && setBudgetOpen(false)} />}
       {editing && <RecordDialog record={editing} onSave={updateRecord} onClose={() => setEditing(null)} />}
+      {feedbackRecord && <FeedbackDialog record={feedbackRecord} onSave={updateFeedback} onClose={() => setFeedbackRecord(null)} />}
       {settingsOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}>
           <section className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -230,11 +243,11 @@ function parseMarkdown(markdown: string): MarkdownBlock[] {
   return blocks
 }
 
-function RecordPage({ data, onSave, onShowView }: { data: AppData; onSave: (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'feedback'>) => void; onShowView: () => void }) {
+function RecordPage({ data, onSave, onShowView }: { data: AppData; onSave: (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'reason'>) => void; onShowView: () => void }) {
   const month = currentMonth()
   const budget = effectiveBudget(data.budgets, month).amount
   const spent = data.records.filter((record) => record.date.startsWith(month)).reduce((sum, record) => sum + record.amount, 0)
-  const [form, setForm] = useState({ date: today(), amount: '', purpose: '', feedback: '' })
+  const [form, setForm] = useState({ date: today(), amount: '', purpose: '', reason: '' })
   const [error, setError] = useState('')
 
   const submit = (event: React.FormEvent) => {
@@ -242,8 +255,8 @@ function RecordPage({ data, onSave, onShowView }: { data: AppData; onSave: (inpu
     const amount = Number(form.amount)
     if (!Number.isFinite(amount) || amount <= 0) return setError('请输入大于 0 的金额')
     if (!form.purpose.trim()) return setError('请填写这笔消费的用途')
-    onSave({ date: form.date, amount, purpose: form.purpose.trim(), feedback: form.feedback.trim() })
-    setForm({ date: today(), amount: '', purpose: '', feedback: '' })
+    onSave({ date: form.date, amount, purpose: form.purpose.trim(), reason: form.reason.trim() })
+    setForm({ date: today(), amount: '', purpose: '', reason: '' })
     setError('')
   }
 
@@ -261,7 +274,8 @@ function RecordPage({ data, onSave, onShowView }: { data: AppData; onSave: (inpu
           <label>日期<input type="date" required value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label>
           <label>金额（元）<input inputMode="decimal" type="number" min="0.01" step="0.01" required placeholder="0.00" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
           <label>用途<input type="text" required maxLength={60} placeholder="例如：购买剃须刀" value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} /></label>
-          <label>反馈 <em>选填</em><textarea maxLength={300} rows={3} placeholder="实际作用或后续感受" value={form.feedback} onChange={(event) => setForm({ ...form, feedback: event.target.value })} /></label>
+          <label>消费原因 <em>选填</em><textarea maxLength={300} rows={3} placeholder="当时为什么决定花这笔钱？" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
+          <p className="form-hint">实际使用后的感受，可以稍后在“查看”中补充。</p>
           {error && <p className="field-error" role="alert">{error}</p>}
           <button className="primary-button" type="submit">保存记录</button>
         </form>
@@ -270,7 +284,7 @@ function RecordPage({ data, onSave, onShowView }: { data: AppData; onSave: (inpu
   )
 }
 
-function ViewPage({ month, budget, inherited, spent, remaining, percent, records, onMonthChange, onBudget, onEdit, onDelete }: { month: string; budget: number | null; inherited: boolean; spent: number; remaining: number; percent: number; records: ExpenseRecord[]; onMonthChange: (month: string) => void; onBudget: () => void; onEdit: (record: ExpenseRecord) => void; onDelete: (record: ExpenseRecord) => void }) {
+function ViewPage({ month, budget, inherited, spent, remaining, percent, records, onMonthChange, onBudget, onEdit, onFeedback, onDelete }: { month: string; budget: number | null; inherited: boolean; spent: number; remaining: number; percent: number; records: ExpenseRecord[]; onMonthChange: (month: string) => void; onBudget: () => void; onEdit: (record: ExpenseRecord) => void; onFeedback: (record: ExpenseRecord) => void; onDelete: (record: ExpenseRecord) => void }) {
   return (
     <div className="page-stack">
       <section className="month-header">
@@ -291,7 +305,7 @@ function ViewPage({ month, budget, inherited, spent, remaining, percent, records
         {records.length === 0 ? <div className="empty-state"><strong>这个月还没有记录</strong><p>记录消费后，会按日期显示在这里。</p></div> : (
           <div className="record-list">{records.map((record) => <article className="record-item" key={record.id}>
             <div className="record-date"><strong>{Number(record.date.slice(8))}</strong><span>{Number(record.date.slice(5, 7))}月</span></div>
-            <div className="record-content"><div><h3>{record.purpose}</h3><strong>{formatMoney(record.amount)}</strong></div>{record.feedback && <p>{record.feedback}</p>}<div className="record-actions"><button onClick={() => onEdit(record)}>编辑</button><button className="danger" onClick={() => onDelete(record)}>删除</button></div></div>
+            <div className="record-content"><div><h3>{record.purpose}</h3><strong>{formatMoney(record.amount)}</strong></div>{record.reason && <p className="record-note"><b>消费原因</b>{record.reason}</p>}{record.feedback && <p className="record-note feedback"><b>使用反馈</b>{record.feedback}</p>}<div className="record-actions"><button className="feedback-action" onClick={() => onFeedback(record)}>{record.feedback ? '修改反馈' : '记录反馈'}</button><button onClick={() => onEdit(record)}>编辑</button><button className="danger" onClick={() => onDelete(record)}>删除</button></div></div>
           </article>)}</div>
         )}
       </section>
@@ -299,20 +313,25 @@ function ViewPage({ month, budget, inherited, spent, remaining, percent, records
   )
 }
 
-function RecordForm({ initial, submitLabel, onSave }: { initial: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'feedback'>; submitLabel: string; onSave: (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'feedback'>) => void }) {
+function RecordForm({ initial, submitLabel, onSave }: { initial: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'reason'>; submitLabel: string; onSave: (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'reason'>) => void }) {
   const [form, setForm] = useState({ ...initial, amount: String(initial.amount) })
   const [error, setError] = useState('')
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     const amount = Number(form.amount)
     if (!Number.isFinite(amount) || amount <= 0 || !form.purpose.trim()) return setError('请填写正确的金额和用途')
-    onSave({ ...form, amount, purpose: form.purpose.trim(), feedback: form.feedback.trim() })
+    onSave({ ...form, amount, purpose: form.purpose.trim(), reason: form.reason.trim() })
   }
-  return <form onSubmit={submit} className="compact-form"><label>日期<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label><label>金额（元）<input type="number" inputMode="decimal" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label><label>用途<input maxLength={60} value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} /></label><label>反馈 <em>选填</em><textarea rows={3} maxLength={300} value={form.feedback} onChange={(event) => setForm({ ...form, feedback: event.target.value })} /></label>{error && <p className="field-error">{error}</p>}<button className="primary-button">{submitLabel}</button></form>
+  return <form onSubmit={submit} className="compact-form"><label>日期<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label><label>金额（元）<input type="number" inputMode="decimal" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label><label>用途<input maxLength={60} value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} /></label><label>消费原因 <em>选填</em><textarea rows={3} maxLength={300} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>{error && <p className="field-error">{error}</p>}<button className="primary-button">{submitLabel}</button></form>
 }
 
-function RecordDialog({ record, onSave, onClose }: { record: ExpenseRecord; onSave: (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'feedback'>) => void; onClose: () => void }) {
+function RecordDialog({ record, onSave, onClose }: { record: ExpenseRecord; onSave: (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'reason'>) => void; onClose: () => void }) {
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title"><div className="modal-heading"><h2 id="edit-title">编辑记录</h2><button className="close-button" onClick={onClose} aria-label="关闭">×</button></div><RecordForm initial={record} submitLabel="保存修改" onSave={onSave} /></section></div>
+}
+
+function FeedbackDialog({ record, onSave, onClose }: { record: ExpenseRecord; onSave: (feedback: string) => void; onClose: () => void }) {
+  const [feedback, setFeedback] = useState(record.feedback)
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title"><div className="modal-heading"><div><p className="eyebrow">{record.purpose}</p><h2 id="feedback-title">记录使用反馈</h2></div><button className="close-button" onClick={onClose} aria-label="关闭">×</button></div><p className="muted">现在回看，这笔消费实际带来了什么作用？是否值得？</p><form onSubmit={(event) => { event.preventDefault(); onSave(feedback.trim()) }}><label>使用反馈 <em>选填</em><textarea autoFocus rows={6} maxLength={500} placeholder="例如：用了两周，确实提高了训练频率；尺码略小，下次会先试穿。" value={feedback} onChange={(event) => setFeedback(event.target.value)} /></label><button className="primary-button">保存反馈</button></form></section></div>
 }
 
 function BudgetDialog({ month, initial, required, onSave, onClose }: { month: string; initial: number | null; required: boolean; onSave: (amount: number) => void; onClose: () => void }) {

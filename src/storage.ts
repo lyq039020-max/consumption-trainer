@@ -26,12 +26,12 @@ export function validateData(value: unknown): AppData {
     if (typeof record.id !== 'string' || !record.id || ids.has(record.id)) throw new Error('记录 ID 缺失或重复')
     if (!isDate(record.date) || !isPositiveNumber(record.amount)) throw new Error(`第 ${index + 1} 条记录的日期或金额不正确`)
     if (typeof record.purpose !== 'string' || !record.purpose.trim()) throw new Error(`第 ${index + 1} 条记录缺少用途`)
-    if (typeof record.feedback !== 'string' || typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') {
+    if ((record.reason !== undefined && typeof record.reason !== 'string') || typeof record.feedback !== 'string' || typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') {
       throw new Error(`第 ${index + 1} 条记录字段不完整`)
     }
     if (Number.isNaN(Date.parse(record.createdAt)) || Number.isNaN(Date.parse(record.updatedAt))) throw new Error('记录时间格式不正确')
     ids.add(record.id)
-    return { ...record, purpose: record.purpose.trim(), feedback: record.feedback.trim() } as ExpenseRecord
+    return { ...record, purpose: record.purpose.trim(), reason: record.reason?.trim() ?? '', feedback: record.feedback.trim() } as ExpenseRecord
   })
 
   const months = new Set<string>()

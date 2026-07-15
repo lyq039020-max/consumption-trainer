@@ -3,6 +3,7 @@ export interface ExpenseRecord {
   date: string
   amount: number
   purpose: string
+  reason: string
   feedback: string
   createdAt: string
   updatedAt: string
