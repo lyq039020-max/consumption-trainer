@@ -31,6 +31,14 @@ describe('本地数据', () => {
       records: [{ id: 'old', date: '2026-07-16', amount: 399, purpose: '购买篮球鞋', feedback: '穿着很舒服', createdAt: '2026-07-16T01:00:00.000Z', updatedAt: '2026-07-16T01:00:00.000Z' }],
       budgets: [],
     })
-    expect(restored.records[0]).toMatchObject({ reason: '', feedback: '穿着很舒服' })
+    expect(restored.records[0]).toMatchObject({ reason: '', feedback: '穿着很舒服', assessment: null })
+  })
+
+  it('拒绝范围外的效果评价', () => {
+    expect(() => validateData({
+      version: 1,
+      records: [{ id: 'bad', date: '2026-07-16', amount: 10, purpose: '测试', reason: '', feedback: '', assessment: { usageFrequency: 4 }, createdAt: '2026-07-16T01:00:00.000Z', updatedAt: '2026-07-16T01:00:00.000Z' }],
+      budgets: [],
+    })).toThrow('效果评价')
   })
 })

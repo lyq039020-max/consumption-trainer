@@ -1,3 +1,14 @@
+export type AssessmentLevel = 1 | 2 | 3
+
+export interface ConsumptionAssessment {
+  usageFrequency: AssessmentLevel
+  problemSolved: AssessmentLevel
+  stateImprovement: AssessmentLevel
+  lastingEffect: AssessmentLevel
+  repurchaseIntent: AssessmentLevel
+  assessedAt: string
+}
+
 export interface ExpenseRecord {
   id: string
   date: string
@@ -5,6 +16,7 @@ export interface ExpenseRecord {
   purpose: string
   reason: string
   feedback: string
+  assessment: ConsumptionAssessment | null
   createdAt: string
   updatedAt: string
 }

@@ -1,4 +1,4 @@
-import type { AppData, ExpenseRecord, MonthlyBudget } from './types'
+import type { AppData, ConsumptionAssessment, ExpenseRecord, MonthlyBudget } from './types'
 import { EMPTY_DATA } from './types'
 
 export const STORAGE_KEY = 'spending-training-data-v1'
@@ -11,6 +11,19 @@ const isMonth = (value: unknown): value is string =>
 
 const isPositiveNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0
+
+const isAssessment = (value: unknown): value is ConsumptionAssessment => {
+  if (!value || typeof value !== 'object') return false
+  const assessment = value as Partial<ConsumptionAssessment>
+  const validLevel = (level: unknown) => level === 1 || level === 2 || level === 3
+  return validLevel(assessment.usageFrequency)
+    && validLevel(assessment.problemSolved)
+    && validLevel(assessment.stateImprovement)
+    && validLevel(assessment.lastingEffect)
+    && validLevel(assessment.repurchaseIntent)
+    && typeof assessment.assessedAt === 'string'
+    && !Number.isNaN(Date.parse(assessment.assessedAt))
+}
 
 export function validateData(value: unknown): AppData {
   if (!value || typeof value !== 'object') throw new Error('文件内容不是有效的数据对象')
@@ -29,9 +42,10 @@ export function validateData(value: unknown): AppData {
     if ((record.reason !== undefined && typeof record.reason !== 'string') || typeof record.feedback !== 'string' || typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') {
       throw new Error(`第 ${index + 1} 条记录字段不完整`)
     }
+    if (record.assessment !== undefined && record.assessment !== null && !isAssessment(record.assessment)) throw new Error(`第 ${index + 1} 条记录的效果评价不正确`)
     if (Number.isNaN(Date.parse(record.createdAt)) || Number.isNaN(Date.parse(record.updatedAt))) throw new Error('记录时间格式不正确')
     ids.add(record.id)
-    return { ...record, purpose: record.purpose.trim(), reason: record.reason?.trim() ?? '', feedback: record.feedback.trim() } as ExpenseRecord
+    return { ...record, purpose: record.purpose.trim(), reason: record.reason?.trim() ?? '', feedback: record.feedback.trim(), assessment: record.assessment ?? null } as ExpenseRecord
   })
 
   const months = new Set<string>()

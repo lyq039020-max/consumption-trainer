@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AppData, ExpenseRecord } from './types'
+import type { AppData, AssessmentLevel, ConsumptionAssessment, ExpenseRecord } from './types'
 import { effectiveBudget, loadData, saveData, validateData } from './storage'
 import { hasSeenIntro, markIntroSeen } from './intro'
+import { CRITERIA, type AssessmentKey } from './analysis/config'
+import { analyzeRecord } from './analysis/engine'
 import articleMarkdown from './content/why-consumption-training.md?raw'
 
 type Tab = 'record' | 'view'
@@ -62,7 +64,7 @@ function App() {
 
   const addRecord = (input: Pick<ExpenseRecord, 'date' | 'amount' | 'purpose' | 'reason'>) => {
     const timestamp = new Date().toISOString()
-    setData((previous) => ({ ...previous, records: [...previous.records, { ...input, feedback: '', id: newId(), createdAt: timestamp, updatedAt: timestamp }] }))
+    setData((previous) => ({ ...previous, records: [...previous.records, { ...input, feedback: '', assessment: null, id: newId(), createdAt: timestamp, updatedAt: timestamp }] }))
     setViewMonth(input.date.slice(0, 7))
     setNotice({ type: 'success', text: '记录已保存' })
   }
@@ -78,14 +80,14 @@ function App() {
     setNotice({ type: 'success', text: '记录已更新' })
   }
 
-  const updateFeedback = (feedback: string) => {
+  const updateFeedback = ({ feedback, assessment }: { feedback: string; assessment: ConsumptionAssessment }) => {
     if (!feedbackRecord) return
     setData((previous) => ({
       ...previous,
-      records: previous.records.map((record) => record.id === feedbackRecord.id ? { ...record, feedback, updatedAt: new Date().toISOString() } : record),
+      records: previous.records.map((record) => record.id === feedbackRecord.id ? { ...record, feedback, assessment, updatedAt: new Date().toISOString() } : record),
     }))
     setFeedbackRecord(null)
-    setNotice({ type: 'success', text: feedback ? '使用反馈已保存' : '使用反馈已清空' })
+    setNotice({ type: 'success', text: '使用反馈与效果评价已保存' })
   }
 
   const deleteRecord = (record: ExpenseRecord) => {
@@ -303,10 +305,13 @@ function ViewPage({ month, budget, inherited, spent, remaining, percent, records
       <section className="records-section">
         <div className="records-heading"><div><p className="eyebrow">消费明细</p><h2>{records.length} 笔记录</h2></div></div>
         {records.length === 0 ? <div className="empty-state"><strong>这个月还没有记录</strong><p>记录消费后，会按日期显示在这里。</p></div> : (
-          <div className="record-list">{records.map((record) => <article className="record-item" key={record.id}>
-            <div className="record-date"><strong>{Number(record.date.slice(8))}</strong><span>{Number(record.date.slice(5, 7))}月</span></div>
-            <div className="record-content"><div><h3>{record.purpose}</h3><strong>{formatMoney(record.amount)}</strong></div>{record.reason && <p className="record-note"><b>消费原因</b>{record.reason}</p>}{record.feedback && <p className="record-note feedback"><b>使用反馈</b>{record.feedback}</p>}<div className="record-actions"><button className="feedback-action" onClick={() => onFeedback(record)}>{record.feedback ? '修改反馈' : '记录反馈'}</button><button onClick={() => onEdit(record)}>编辑</button><button className="danger" onClick={() => onDelete(record)}>删除</button></div></div>
-          </article>)}</div>
+          <div className="record-list">{records.map((record) => {
+            const analysis = analyzeRecord(record)
+            return <article className="record-item" key={record.id}>
+              <div className="record-date"><strong>{Number(record.date.slice(8))}</strong><span>{Number(record.date.slice(5, 7))}月</span></div>
+              <div className="record-content"><div><h3>{record.purpose}</h3><strong>{formatMoney(record.amount)}</strong></div>{record.reason && <p className="record-note"><b>消费原因</b>{record.reason}</p>}{record.feedback && <p className="record-note feedback"><b>使用反馈</b>{record.feedback}</p>}{analysis && <div className={`analysis-result ${analysis.level}`}><strong>{analysis.label}</strong><span>{analysis.reason}</span></div>}<div className="record-actions"><button className="feedback-action" onClick={() => onFeedback(record)}>{record.assessment ? '修改复盘' : '记录反馈'}</button><button onClick={() => onEdit(record)}>编辑</button><button className="danger" onClick={() => onDelete(record)}>删除</button></div></div>
+            </article>
+          })}</div>
         )}
       </section>
     </div>
@@ -329,9 +334,26 @@ function RecordDialog({ record, onSave, onClose }: { record: ExpenseRecord; onSa
   return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title"><div className="modal-heading"><h2 id="edit-title">编辑记录</h2><button className="close-button" onClick={onClose} aria-label="关闭">×</button></div><RecordForm initial={record} submitLabel="保存修改" onSave={onSave} /></section></div>
 }
 
-function FeedbackDialog({ record, onSave, onClose }: { record: ExpenseRecord; onSave: (feedback: string) => void; onClose: () => void }) {
+function FeedbackDialog({ record, onSave, onClose }: { record: ExpenseRecord; onSave: (input: { feedback: string; assessment: ConsumptionAssessment }) => void; onClose: () => void }) {
   const [feedback, setFeedback] = useState(record.feedback)
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title"><div className="modal-heading"><div><p className="eyebrow">{record.purpose}</p><h2 id="feedback-title">记录使用反馈</h2></div><button className="close-button" onClick={onClose} aria-label="关闭">×</button></div><p className="muted">现在回看，这笔消费实际带来了什么作用？是否值得？</p><form onSubmit={(event) => { event.preventDefault(); onSave(feedback.trim()) }}><label>使用反馈 <em>选填</em><textarea autoFocus rows={6} maxLength={500} placeholder="例如：用了两周，确实提高了训练频率；尺码略小，下次会先试穿。" value={feedback} onChange={(event) => setFeedback(event.target.value)} /></label><button className="primary-button">保存反馈</button></form></section></div>
+  const [answers, setAnswers] = useState<Partial<Record<AssessmentKey, AssessmentLevel>>>(() => record.assessment ? Object.fromEntries(CRITERIA.map((criterion) => [criterion.key, record.assessment?.[criterion.key]])) : {})
+  const [error, setError] = useState('')
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (CRITERIA.some((criterion) => !answers[criterion.key])) return setError('请完成上面的 5 项快速评价')
+    onSave({
+      feedback: feedback.trim(),
+      assessment: {
+        usageFrequency: answers.usageFrequency!,
+        problemSolved: answers.problemSolved!,
+        stateImprovement: answers.stateImprovement!,
+        lastingEffect: answers.lastingEffect!,
+        repurchaseIntent: answers.repurchaseIntent!,
+        assessedAt: new Date().toISOString(),
+      },
+    })
+  }
+  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title"><div className="modal-heading"><div><p className="eyebrow">{record.purpose}</p><h2 id="feedback-title">回看这笔消费</h2></div><button className="close-button" onClick={onClose} aria-label="关闭">×</button></div><p className="muted">凭直觉点选即可，应用会在本机生成一个简单、可解释的效果判断。</p><form onSubmit={submit}><div className="assessment-list">{CRITERIA.map((criterion) => <fieldset key={criterion.key}><legend>{criterion.label}</legend><div className="choice-row">{criterion.options.map((option) => <button type="button" aria-pressed={answers[criterion.key] === option.value} className={answers[criterion.key] === option.value ? 'selected' : ''} key={option.value} onClick={() => { setAnswers({ ...answers, [criterion.key]: option.value }); setError('') }}>{option.label}</button>)}</div></fieldset>)}</div><label>补充感受 <em>选填</em><textarea rows={4} maxLength={500} placeholder="实际作用、意外收获，或下次会怎么调整" value={feedback} onChange={(event) => setFeedback(event.target.value)} /></label>{error && <p className="field-error" role="alert">{error}</p>}<button className="primary-button">保存复盘</button></form></section></div>
 }
 
 function BudgetDialog({ month, initial, required, onSave, onClose }: { month: string; initial: number | null; required: boolean; onSave: (amount: number) => void; onClose: () => void }) {
